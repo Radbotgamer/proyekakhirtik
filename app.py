@@ -1,8 +1,10 @@
 # ====================================================================
-# KATALOG EKSTRAKULER & KLASIFIKASI NAIVE BAYES - SMA KALAM KUDUS
+# KATALOG EKSTRAKULER, GRAFIK STATISTIK & NAIVE BAYES - SMA KALAM KUDUS
 # ====================================================================
 
+import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.naive_bayes import MultinomialNB
 import streamlit as st
@@ -10,11 +12,11 @@ import streamlit as st
 # Konfigurasi Halaman Web
 st.set_page_config(
     page_title="Katalog Ekstrakurikuler Kalam Kudus 2026",
-    page_icon="🤖",
+    page_icon="🎓",
     layout="wide",
 )
 
-st.title("🎓 Katalog Ekstrakurikuler & Klasifikasi Cerdas (Naive Bayes)")
+st.title("🎓 Katalog Ekstrakurikuler & Klasifikasi Naive Bayes")
 st.markdown(
     "**SMA Swasta Kristen Kalam Kudus Pematangsiantar (Tahun Ajaran"
     " 2026/2027)**"
@@ -75,7 +77,7 @@ kolom_kuota = next(
 df = df.dropna(subset=[kolom_ekskul, kolom_hari])
 
 
-# Fungsi Kategori Otomatis untuk Latihan Naive Bayes
+# Fungsi Kategori Otomatis untuk Training Model
 def tentukan_kategori(nama):
   nama_str = str(nama).lower()
   if any(k in nama_str for k in ["basket", "futsal", "badminton", "voli"]):
@@ -94,8 +96,7 @@ def tentukan_kategori(nama):
 
 df["Kategori_Asli"] = df[kolom_ekskul].apply(tentukan_kategori)
 
-# --- PELATIHAN MODEL NAIVE BAYES ---
-# Menggunakan CountVectorizer & MultinomialNB untuk klasifikasi teks
+# --- PELATIHAN MODEL MULTINOMIAL NAIVE BAYES ---
 vectorizer = CountVectorizer()
 X_train = vectorizer.fit_transform(df[kolom_ekskul].astype(str))
 y_train = df["Kategori_Asli"]
@@ -103,7 +104,6 @@ y_train = df["Kategori_Asli"]
 model = MultinomialNB()
 model.fit(X_train, y_train)
 
-# Prediksi kembali data dengan model Naive Bayes
 df["Prediksi_Kategori"] = model.predict(X_train)
 
 # --- TAMPILAN WEB ---
@@ -113,35 +113,41 @@ st.dataframe(
     use_container_width=True,
 )
 
+# Visualisasi Grafik Statistik Kategori
 st.markdown("---")
-st.subheader(
-    "🤖 Sistem Tanya-Jawab / Prediksi Kategori dengan Naive Bayes"
+st.subheader("📊 Statistik Sebaran Kategori Ekstrakurikuler")
+fig, ax = plt.subplots(figsize=(8, 4))
+sns.countplot(
+    data=df,
+    x="Prediksi_Kategori",
+    order=df["Prediksi_Kategori"].value_counts().index,
+    palette="viridis",
+    ax=ax,
 )
-st.write(
-    "Ketik nama kegiatan atau kata kunci untuk diklasifikasikan oleh sistem"
-    " Machine Learning:"
-)
+ax.set_title("Jumlah Kegiatan Berdasarkan Kategori")
+ax.set_xlabel("Kategori")
+ax.set_ylabel("Jumlah")
+st.pyplot(fig)
 
+st.markdown("---")
+st.subheader("🤖 Uji Coba Klasifikasi Teks dengan MultinomialNB")
 query_input = st.text_input(
     "Masukkan nama kegiatan (contoh: 'Klub Basket' atau 'Paduan Suara'):"
 )
 
 if query_input:
-  # Vektorisasi dan prediksi input user menggunakan model Naive Bayes
   query_vec = vectorizer.transform([query_input])
   prediksi_hasil = model.predict(query_vec)[0]
 
   st.success(
-      f"Hasil Analisis Naive Bayes: Kegiatan tersebut masuk ke kategori:"
-      f" **{prediksi_hasil}**"
+      f"Hasil Prediksi **MultinomialNB**: Masuk ke kategori **{prediksi_hasil}**"
   )
 
-  # Menampilkan data yang cocok dari tabel
   hasil_filter = df[df["Prediksi_Kategori"] == prediksi_hasil]
   if not hasil_filter.empty:
     st.write(
-        "Rekomendasi kegiatan lain yang sejenis di kategori"
-        f" **{prediksi_hasil}**:"
+        "Rekomendasi kegiatan lain di kategori **"
+        f"{prediksi_hasil}**:"
     )
     for idx, row in hasil_filter.iterrows():
       st.info(
