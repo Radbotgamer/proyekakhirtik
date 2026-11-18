@@ -1,18 +1,20 @@
 # ====================================================================
-# KATALOG EKSTRAKULER & PENCARIAN CERDAS - SMA KALAM KUDUS
+# KATALOG EKSTRAKULER & KLASIFIKASI NAIVE BAYES - SMA KALAM KUDUS
 # ====================================================================
 
 import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
 import streamlit as st
 
 # Konfigurasi Halaman Web
 st.set_page_config(
     page_title="Katalog Ekstrakurikuler Kalam Kudus 2026",
-    page_icon="🎓",
+    page_icon="🤖",
     layout="wide",
 )
 
-st.title("🎓 Katalog Ekstrakurikuler & Informasi Cerdas")
+st.title("🎓 Katalog Ekstrakurikuler & Klasifikasi Cerdas (Naive Bayes)")
 st.markdown(
     "**SMA Swasta Kristen Kalam Kudus Pematangsiantar (Tahun Ajaran"
     " 2026/2027)**"
@@ -72,21 +74,86 @@ kolom_kuota = next(
 
 df = df.dropna(subset=[kolom_ekskul, kolom_hari])
 
-# Tampilan Utama Website
-st.subheader("📋 Daftar Lengkap Kegiatan Ekstrakurikuler")
+
+# Fungsi Kategori Otomatis untuk Latihan Naive Bayes
+def tentukan_kategori(nama):
+  nama_str = str(nama).lower()
+  if any(k in nama_str for k in ["basket", "futsal", "badminton", "voli"]):
+    return "Olahraga"
+  elif any(k in nama_str for k in ["musik", "tari", "choir", "vocal", "paduan"]):
+    return "Seni & Musik"
+  elif any(
+      k in nama_str for k in ["osn", "olimpiade", "math", "fisika", "kimia"]
+  ):
+    return "Akademik"
+  elif any(k in nama_str for k in ["english", "mandarin", "jepang"]):
+    return "Bahasa"
+  else:
+    return "Keterampilan/Umum"
+
+
+df["Kategori_Asli"] = df[kolom_ekskul].apply(tentukan_kategori)
+
+# --- PELATIHAN MODEL NAIVE BAYES ---
+# Menggunakan CountVectorizer & MultinomialNB untuk klasifikasi teks
+vectorizer = CountVectorizer()
+X_train = vectorizer.fit_transform(df[kolom_ekskul].astype(str))
+y_train = df["Kategori_Asli"]
+
+model = MultinomialNB()
+model.fit(X_train, y_train)
+
+# Prediksi kembali data dengan model Naive Bayes
+df["Prediksi_Kategori"] = model.predict(X_train)
+
+# --- TAMPILAN WEB ---
+st.subheader("📋 Daftar Ekstrakurikuler & Hasil Klasifikasi Naive Bayes")
 st.dataframe(
-    df[[kolom_hari, kolom_waktu, kolom_ekskul, kolom_guru, kolom_tempat, kolom_kuota]],
+    df[[kolom_hari, kolom_waktu, kolom_ekskul, "Prediksi_Kategori", kolom_guru, kolom_tempat, kolom_kuota]],
     use_container_width=True,
 )
 
 st.markdown("---")
-st.subheader("🔍 Cari Informasi Ekstrakurikuler")
-keyword = st.text_input(
-    "Ketik nama ekskul atau hari (contoh: Basket, Musik, Senin):"
+st.subheader(
+    "🤖 Sistem Tanya-Jawab / Prediksi Kategori dengan Naive Bayes"
+)
+st.write(
+    "Ketik nama kegiatan atau kata kunci untuk diklasifikasikan oleh sistem"
+    " Machine Learning:"
 )
 
+query_input = st.text_input(
+    "Masukkan nama kegiatan (contoh: 'Klub Basket' atau 'Paduan Suara'):"
+)
+
+if query_input:
+  # Vektorisasi dan prediksi input user menggunakan model Naive Bayes
+  query_vec = vectorizer.transform([query_input])
+  prediksi_hasil = model.predict(query_vec)[0]
+
+  st.success(
+      f"Hasil Analisis Naive Bayes: Kegiatan tersebut masuk ke kategori:"
+      f" **{prediksi_hasil}**"
+  )
+
+  # Menampilkan data yang cocok dari tabel
+  hasil_filter = df[df["Prediksi_Kategori"] == prediksi_hasil]
+  if not hasil_filter.empty:
+    st.write(
+        "Rekomendasi kegiatan lain yang sejenis di kategori"
+        f" **{prediksi_hasil}**:"
+    )
+    for idx, row in hasil_filter.iterrows():
+      st.info(
+          f"• **{row[kolom_ekskul]}** | Hari: {row[kolom_hari]} ({row[kolom_waktu]})"
+          f" | Pembimbing: {row[kolom_guru]}"
+      )
+
+st.markdown("---")
+st.subheader("🔍 Pencarian Bebas Berdasarkan Kata Kunci")
+keyword = st.text_input("Cari bebas (hari, nama guru, dll):")
 if keyword:
-  hasil = df[
+  hasil_cari = df[
       df.apply(
           lambda row: row.astype(str)
           .str.contains(keyword, case=False, na=False)
@@ -94,16 +161,10 @@ if keyword:
           axis=1,
       )
   ]
-
-  if not hasil.empty:
-    st.success(f"Ditemukan {len(hasil)} kegiatan yang cocok:")
-    for idx, row in hasil.iterrows():
-      st.info(
-          f"• **{row[kolom_ekskul]}**\n"
-          f"  - Hari / Waktu: {row[kolom_hari]}, pukul {row[kolom_waktu]}\n"
-          f"  - Pembimbing: {row[kolom_guru]}\n"
-          f"  - Tempat: {row[kolom_tempat]}\n"
-          f"  - Kuota: {row[kolom_kuota]}"
-      )
+  if not hasil_cari.empty:
+    st.write(f"Ditemukan {len(hasil_cari)} data:")
+    st.dataframe(
+        hasil_cari[[kolom_hari, kolom_waktu, kolom_ekskul, kolom_guru, kolom_tempat]]
+    )
   else:
-    st.warning("Maaf, data tidak ditemukan. Coba kata kunci lain!")
+    st.warning("Data tidak ditemukan.")
